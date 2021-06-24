@@ -265,17 +265,19 @@ UsedLibraryUrn="urn:adsk.eagle:library:196"
 UsedLibraryUrn="urn:adsk.eagle:library:197"
 UsedLibraryUrn="urn:adsk.eagle:library:198"
 UsedLibraryUrn="urn:adsk.eagle:library:199"
+UsedLibrary="C:/Users/土田　貴大/Documents/EAGLE/libraries/Akizuki.lbr"
 UsedLibrary="C:/Users/土田　貴大/Documents/EAGLE/libraries/DA14531-00000FX2.lbr"
 UsedLibrary="C:/Users/土田　貴大/Documents/EAGLE/libraries/ESP32-DEVKITC-32D.lbr"
 UsedLibrary="C:/Users/土田　貴大/Documents/EAGLE/libraries/FaBo-Motor.lbr"
 UsedLibrary="C:/Users/土田　貴大/Documents/EAGLE/libraries/LSM9DS1.lbr"
 UsedLibrary="C:/Users/土田　貴大/Documents/EAGLE/libraries/LSM9DS1_temp.lbr"
 UsedLibrary="C:/Users/土田　貴大/Documents/EAGLE/libraries/MMA8452Q.lbr"
+UsedLibrary="C:/Users/土田　貴大/Documents/EAGLE/libraries/ESP32-WROVER.lbr"
 
 [Win_1]
 Type="Control Panel"
 Number=0
 
 [Desktop]
-Screen="1920 1200"
+Screen="3840 1273"
 Window="Win_1"
