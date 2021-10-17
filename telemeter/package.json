@@ -1,0 +1,40 @@
+{
+  "name": "telemeter",
+  "version": "0.1.0",
+  "description": "Telemetry viewer",
+  "main": "index.html",
+  "scripts": {
+    "dev": "nw src/",
+    "build": "webpack",
+    "watch": "webpack -w",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wasa-cansat/Tensegrity.git"
+  },
+  "author": "WASA CanSat",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/wasa-cansat/Tensegrity/issues"
+  },
+  "homepage": "https://github.com/wasa-cansat/Tensegrity#readme",
+  "devDependencies": {
+    "gulp": "^4.0.2",
+    "nw": "^0.57.1",
+    "nw-builder": "^3.5.7",
+    "ts-loader": "^9.2.6",
+    "typescript": "^4.4.4",
+    "webpack": "^5.58.2",
+    "webpack-cli": "^4.9.0"
+  },
+  "dependencies": {
+    "@serialport/list": "^9.2.4",
+    "@types/three": "^0.133.1",
+    "chrome-apps-serialport": "^1.0.8",
+    "fomantic-ui": "^2.8.8",
+    "node-pre-gyp": "^0.17.0",
+    "serialport": "^9.2.4",
+    "three": "^0.133.1"
+  }
+}
