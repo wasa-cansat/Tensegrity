@@ -16,10 +16,8 @@ public:
 
   byte i2c_error = 0;
 
-  Motor() {
-    addr = 0x00;
-  }
-  bool init(I2CAddr addr);
+  Motor(I2CAddr addr): addr(addr) {}
+  bool init();
 
   void clear_control();
   void control(float voltage, bool brake = false);
@@ -43,7 +41,7 @@ class Runner {
   float voltage = 0;
   int jog_count = 0;
 
-  Stream &S = Serial;
+  Comm &comm;
 
 public:
   bool enable = false;
@@ -51,7 +49,21 @@ public:
 
   int target = 0;
 
-  bool init(uint8_t number, uint8_t motorAddr, Pin limitSW, Vec3 axis, bool reverse = false);
+ Runner(Comm &comm,
+        uint8_t number,
+        uint8_t motorAddr,
+        Pin limitSW,
+        Vec3 axis,
+        bool reverse = false):
+  comm(comm),
+      number(number),
+      motor(Motor(motorAddr)),
+      limitSW(limitSW),
+      axis(axis),
+      reverse(reverse) {};
+
+  /* bool init(uint8_t number, uint8_t motorAddr, Pin limitSW, Vec3 axis, bool reverse = false); */
+  bool init();
   void update();
   void headTowards(Vec3 goal);
 
@@ -66,5 +78,6 @@ public:
   void test();
   bool checkLimitSwitches();
   void print();
+  void send();
 };
 

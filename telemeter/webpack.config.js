@@ -1,3 +1,5 @@
+webpack = require("webpack");
+
 module.exports = {
   mode: "development",
   target: "node",
@@ -15,4 +17,11 @@ module.exports = {
   resolve: {
     extensions: [".ts", ".js"],
   },
+
+  plugins: [
+    new webpack.ProvidePlugin({
+      $: "jquery",
+      jQuery: "jquery",
+    }),
+  ],
 };

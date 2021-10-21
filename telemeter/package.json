@@ -20,6 +20,7 @@
   },
   "homepage": "https://github.com/wasa-cansat/Tensegrity#readme",
   "devDependencies": {
+    "@types/jquery": "^3.5.7",
     "gulp": "^4.0.2",
     "nw": "^0.57.1",
     "nw-builder": "^3.5.7",
@@ -30,10 +31,13 @@
   },
   "dependencies": {
     "@serialport/list": "^9.2.4",
+    "@types/semantic-ui": "^2.2.7",
     "@types/three": "^0.133.1",
     "chrome-apps-serialport": "^1.0.8",
     "fomantic-ui": "^2.8.8",
+    "jquery": "^3.6.0",
     "node-pre-gyp": "^0.17.0",
+    "scramjet": "^4.36.0",
     "serialport": "^9.2.4",
     "three": "^0.133.1"
   }

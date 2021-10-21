@@ -1,8 +1,7 @@
 #include "Runner.h"
 
 
-bool Motor::init(I2CAddr addr) {
-    this->addr = addr;
+bool Motor::init() {
     Wire.beginTransmission(addr);
     i2c_error = Wire.endTransmission();
     return i2c_error == 0;
@@ -53,11 +52,12 @@ byte Motor::read_fault() {
 }
 
 
-bool Runner::init(uint8_t number, uint8_t motorAddr, Pin limitSW, Vec3 axis, bool reverse) {
-    this->number  = number;
-    this->limitSW = limitSW;
-    this->axis    = axis;
-    this->reverse = reverse;
+bool Runner::init() {
+// (uint8_t number, uint8_t motorAddr, Pin limitSW, Vec3 axis, bool reverse) {
+    // this->number  = number;
+    // this->limitSW = limitSW;
+    // this->axis    = axis;
+    // this->reverse = reverse;
 
     voltage   = 0;
     jog_count = 0;
@@ -65,14 +65,12 @@ bool Runner::init(uint8_t number, uint8_t motorAddr, Pin limitSW, Vec3 axis, boo
     analogSetPinAttenuation(limitSW, ADC_11db);
     pinMode(limitSW, ANALOG);
 
-    if (!motor.init(motorAddr)) {
-      S.print("Failed to communicate with Motor #");
-      S.print(number);
-      S.print(" (Address: ");
-      S.print(motorAddr, HEX);
-      S.println(")");
-      enable = false;
-      return false;
+    if (!motor.init()) {
+        char info[4] = "MT0";
+        info[2] += number;
+        comm.error('M', info, "Failed to communicate with Motor");
+        enable = false;
+        return false;
     }
     delay(10);
     motor.clear_control();
@@ -86,8 +84,8 @@ bool Runner::init(uint8_t number, uint8_t motorAddr, Pin limitSW, Vec3 axis, boo
 
 void Runner::update() {
     int limit = analogRead(limitSW);
-    /* S.println(motor.read_fault()); */
-    /* motor.clear_fault(); */
+    /* comm.log(motor.read_fault()); */
+    motor.clear_fault();
 
     float target_voltage = 0;
 
@@ -147,12 +145,11 @@ int Runner::position() {
   // For debug ---------------------------------------------------------------
 
 void Runner::jog(int count) {
-    S.println(count);
     jog_count = count;
   }
 
 void Runner::test() {
-    S.println("Testing runner...");
+    comm.log("Testing runner...");
     delay(500);
     target = 1;
 
@@ -173,25 +170,25 @@ void Runner::test() {
   }
 
 bool Runner::checkLimitSwitches() {
-    S.println("Checking limit switches...");
+    comm.log("Checking limit switches...");
     bool rev = false;
     int i = 0;
     target = 1;
     while (true) {
       update();
       if (onEndA()) {
-        S.println("Detected the end A");
+        comm.log("Detected the end A");
         break;
       }
       else if (onEndB()) {
         rev = true;
         break;
-        S.println("Detected the end B");
+        comm.log("Detected the end B");
       }
       delay(50);
       i++;
-      if (i > 500 || S.available() > 0) {
-        S.println("Couldn't detect any ends");
+      if (i > 500 || comm.inputAvailable() > 0) {
+        comm.log("Couldn't detect any ends");
         return false;
       }
     }
@@ -201,29 +198,39 @@ bool Runner::checkLimitSwitches() {
     while (true) {
       update();
       if (rev ? onEndA() : onEndB()) {
-        S.println("Detected another end");
+        comm.log("Detected another end");
         break;
       }
       delay(50);
       i++;
-      if (i > 500 || S.available() > 0) {
-        S.println("Couldn't detect another end");
+      if (i > 500 || comm.inputAvailable() > 0) {
+        comm.log("Couldn't detect another end");
         return false;
       }
     }
 
-    S.println(rev ? "reverse = true" : "reverse = false");
+    comm.log(rev ? "reverse = true" : "reverse = false");
 
     return true;
   }
 
 void Runner::print() {
-    S.print(",T"); S.print(number); S.print(":");
-    S.print(target);
-    S.print(",P"); S.print(number); S.print(":");
-    S.print(position());
-    S.print(",F"); S.print(number); S.print(":");
-    S.print(motor.read_fault());
-    /* S.print(",L"); S.print(number); S.print(":"); */
-    /* S.print(analogRead(limitSW) / 1000.0); */
+    Serial.print(",T"); Serial.print(number); Serial.print(":");
+    Serial.print(target);
+    Serial.print(",P"); Serial.print(number); Serial.print(":");
+    Serial.print(position());
+    Serial.print(",F"); Serial.print(number); Serial.print(":");
+    Serial.print(motor.read_fault());
+    Serial.println("");
+    /* Serial.print(",L"); Serial.print(number); Serial.print(":"); */
+    /* Serial.print(analogRead(limitSW) / 1000.0); */
+}
+
+void Runner::send() {
+    byte data[4];
+    data[0] = target;
+    data[1] = position();
+    data[2] = voltage;
+    data[3] = motor.read_fault();
+    comm.send('R', number, data);
 }

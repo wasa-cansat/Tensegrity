@@ -1,4 +1,4 @@
-#include <BluetoothSerial.h>
+/* #include <BluetoothSerial.h> */
 #include <SPI.h>
 #include <Wire.h>
 #include <TinyGPS++.h>
@@ -11,14 +11,10 @@
 #include "Runner.h"
 
 
-/* #define LOG_VIA_BLUETOOTH */
 
-#ifdef LOG_VIA_BLUETOOTH
-BluetoothSerial S;
-#else
-#define S Serial
-#endif
+/* BluetoothSerial BS; */
 
+Comm comm('T');
 
 // Wire ======================================--================================
 #define SDA 21
@@ -41,13 +37,20 @@ Madgwick MadgwickFilter;
 
 
 // Runner ======================================================================
-Runner runners[6];
+Runner runners[6] = {
+    Runner(comm, 0, 0x60, A0, vec3(0, 0, 1)),
+    Runner(comm, 1, 0x61, A3, vec3(0, 0, 1)),
+    Runner(comm, 2, 0x64, A4, vec3(0, 0, 1)),
+    Runner(comm, 3, 0x63, A5, vec3(0, 0, 1)),
+    Runner(comm, 4, 0x67, A6, vec3(0, 0, 1)),
+    Runner(comm, 5, 0x65, A7, vec3(0, 0, 1)),
+};
 
 // General =====================================================================
 #define FREQ 20
 
-#define SERIAL_BAUD 115200
-#define PRINT_FREQ 1
+#define SERIAL_BAUD 112500
+#define PRINT_FREQ 4
 static unsigned long lastPrint = 0; // Keep track of print time
 
 // Command =====================================================================
@@ -82,37 +85,27 @@ void printAccel();
 void printMag();
 void printAttitude();
 
-void setup()
-{
-#ifdef LOG_VIA_BLUETOOTH
-  S.begin("Tensegrity");
-#else
-  S.begin(SERIAL_BAUD);
-#endif
+void setup() {
+  Serial.begin(SERIAL_BAUD);
+  /* BS.begin("Tensegrity"); */
+  comm.setMode(Comm::Hex);
+  comm.setSerialDestination(Serial);
+  comm.setTelemetryDestination(Serial);
 
   Wire.begin(SDA, SCL);
   ss.begin(GPS_BAUD);
 
-  S.println("Initializing");
+  comm.log("Initializing");
 
   // Initialize and diagnose
   while (true) {
     bool i2c_ok = scanI2C();
     bool imu_ok = imu.begin(LSM9DS1_AG, LSM9DS1_M);
-    if (!imu_ok) S.println("Failed to communicate with LSM9DS1.");
+    if (!imu_ok) comm.error('I', "IMU", "Failed to communicate with LSM9DS1.");
     imu_ok = true;
 
-    /* uint8_t LIMITS[6] = { A0, A3, A4, A5, A6, A7 }; */
-    /* Pin LIMITS[6] = { 36, 39, 32, 33, 34, 35 }; */
-
     bool runners_ok = true;
-    runners_ok &= runners[0].init(0, 0x60, A0, vec3(0, 0, 1));
-    runners_ok &= runners[1].init(1, 0x61, A3, vec3(0, 0, 1));
-    runners_ok &= runners[2].init(2, 0x62, A4, vec3(0, 0, 1));
-    runners_ok &= runners[3].init(3, 0x63, A5, vec3(0, 0, 1));
-    runners_ok &= runners[4].init(4, 0x64, A6, vec3(0, 0, 1));
-    runners_ok &= runners[5].init(5, 0x65, A7, vec3(0, 0, 1));
-
+    for (int i = 0; i < 6; i++) runners_ok &= runners[i].init();
     runners_ok = true;
 
     bool gps_ok = true;
@@ -184,13 +177,41 @@ void loop()
   // Print for debug
   if (millis() - lastPrint > 1000 / PRINT_FREQ) {
 
-    S.print(",Lat:"); S.print(gps.location.lat(), 6);
-    S.print(",Lng:"); S.print(gps.location.lng(), 6);
+    comm.send('T', 0, (float)start_millis);
+
+    comm.send('L', 0, gps.location.lat());
+    comm.send('L', 1, gps.location.lng());
+
+    comm.send('Q', 0, (float)att.a);
+    comm.send('Q', 1, (float)att.b);
+    comm.send('Q', 2, (float)att.c);
+    comm.send('Q', 3, (float)att.d);
+
+    comm.send('A', 0, imu.calcAccel(imu.ax));
+    comm.send('A', 1, imu.calcAccel(imu.ay));
+    comm.send('A', 2, imu.calcAccel(imu.az));
+
+    /* printQuaternion(att); */
+
+
+
+    comm.nextSequence();
+
+    for (uint8_t i = 0; i < 6; i++) {
+      /* if (runners[i].enable) runners[i].print(); */
+    }
+
+    /* Serial.print(",Lat:"); Serial.print(gps.location.lat(), 6); */
+    /* Serial.print(",Lng:"); Serial.print(gps.location.lng(), 6); */
 
     /* printGyro(); */
     /* printAccel(); */
     /* printMag(); */
     /* printAttitude(); */
+
+    /* Vec3 v = vec3(0, 0, -1); */
+    /* printVec3(att.rotate(v)); */
+    /* Serial.println(""); */
 
 
     /* printVec3(goal_abs, 'G'); */
@@ -198,32 +219,28 @@ void loop()
     /* printQuaternion(att); */
 
     for (uint8_t i = 0; i < 6; i++) {
-      if (runners[i].enable) runners[i].print();
+      if (runners[i].enable) runners[i].send();
     }
-
-    S.println("");
 
     lastPrint = millis(); // Update lastPrint time
   }
 
   // Receive command
-  if (S.available() > 0) {
-    /* String cmd = ""; */
-    /* while (S.available() > 0) { */
-    /*   cmd.concat(S.read()); */
-    /* } */
-    String cmd = S.readStringUntil('\n');
+  String cmd = comm.readLine();
+  if (cmd.length() > 0) {
     switch (command_state) {
     case CommandState::StandBy:
       if (cmd == "j" || (cmd == "" && command == Command::Jog)) {
         command = Command::Jog;
         command_state = CommandState::Target;
-        S.print("Jog: Specify the runnner (#");
-        S.print(command_target);
-        S.println(")");
+        comm.log("Jog: Specify the runnner");
+      }
+      else if (cmd == "c") {
+        comm.log("Calibrate");
+        calibrateIMU();
       }
       else {
-        S.println("Wrong command");
+        comm.log("Wrong command");
         command_state = CommandState::StandBy;
       }
       break;
@@ -233,21 +250,17 @@ void loop()
       }
       else if (cmd == "") {
         command_state = CommandState::Value;
-        S.print("Input the value (");
-        S.print(command_value);
-        S.println(")");
+        comm.log("Input the value");
       }
       else {
         int number = cmd.toInt();
         if (0 <= number && number <= 5) {
           command_target = number;
           command_state = CommandState::Value;
-          S.print("Input the value (");
-          S.print(command_value);
-          S.println(")");
+          comm.log("Input the value");
         }
         else {
-          S.println("Wrong number");
+          comm.log("Wrong number");
           command_state = CommandState::StandBy;
         }
       }
@@ -256,10 +269,11 @@ void loop()
       if (cmd != "") command_value = cmd.toInt();
       switch (command) {
       case Command::Jog:
-        S.print("Jog #");
-        S.print(command_target);
-        S.print(" ");
-        S.println(command_value);
+        String msg = "Jog #";
+        msg.concat(String(command_target));
+        msg.concat(" ");
+        msg.concat(String(command_value));
+        comm.log(msg);
 
         if (command_target >= 0) {
           runners[command_target].jog(command_value / 1000.0 * FREQ);
@@ -278,30 +292,30 @@ void loop()
   unsigned past_millis = millis() - start_millis;
   int wait = 1000 / FREQ - past_millis;
   if (wait > 0) delay(wait);
-  else S.println("FLAMEOUT");
+  else comm.error('F', "FOT", "FLAMEOUT");
 }
 
 
 void calibrateIMU() {
-  S.println("Calibration started...");
+  comm.log("Calibration started...");
   imu.calibrateMag(true);
-  S.println("Calculation finished");
+  comm.log("Calculation finished");
 }
 
 void printGyro() {
-  S.print(",Gx:"); S.print(imu.calcGyro(imu.gx), 2);
-  S.print(",Gy:"); S.print(imu.calcGyro(imu.gy), 2);
-  S.print(",Gz:"); S.print(imu.calcGyro(imu.gz), 2);
+  Serial.print(",Gx:"); Serial.print(imu.calcGyro(imu.gx), 2);
+  Serial.print(",Gy:"); Serial.print(imu.calcGyro(imu.gy), 2);
+  Serial.print(",Gz:"); Serial.print(imu.calcGyro(imu.gz), 2);
 }
 void printAccel() {
-  S.print(",Ax:"); S.print(imu.calcAccel(imu.ax), 2);
-  S.print(",Ay:"); S.print(imu.calcAccel(imu.ay), 2);
-  S.print(",Az:"); S.print(imu.calcAccel(imu.az), 2);
+  Serial.print(",Ax:"); Serial.print(imu.calcAccel(imu.ax), 2);
+  Serial.print(",Ay:"); Serial.print(imu.calcAccel(imu.ay), 2);
+  Serial.print(",Az:"); Serial.print(imu.calcAccel(imu.az), 2);
 }
 void printMag() {
-  S.print(",Mx:"); S.print(imu.calcMag(imu.mx), 2);
-  S.print(",My:"); S.print(imu.calcMag(imu.my), 2);
-  S.print(",Mz:"); S.print(imu.calcMag(imu.mz), 2);
+  Serial.print(",Mx:"); Serial.print(imu.calcMag(imu.mx), 2);
+  Serial.print(",My:"); Serial.print(imu.calcMag(imu.my), 2);
+  Serial.print(",Mz:"); Serial.print(imu.calcMag(imu.mz), 2);
 }
 
 void printAttitude() {
@@ -309,9 +323,9 @@ void printAttitude() {
   float pitch = MadgwickFilter.getPitch();
   float yaw   = MadgwickFilter.getYaw();
 
-  S.print(",Pitch:"); S.print(pitch, 2);
-  S.print(",Roll:");  S.print(roll, 2);
-  S.print(",Yaw:");   S.print(yaw, 2);
+  Serial.print(",Pitch:"); Serial.print(pitch, 2);
+  Serial.print(",Roll:");  Serial.print(roll, 2);
+  Serial.print(",Yaw:");   Serial.print(yaw, 2);
 }
 
 bool scanI2C()
@@ -319,7 +333,7 @@ bool scanI2C()
   byte error, address;
   int nDevices;
 
-  S.println("Scanning...");
+  Serial.println("Scanning...");
 
   nDevices = 0;
   for(address = 1; address < 127; address++ )
@@ -332,32 +346,32 @@ bool scanI2C()
 
       if (error == 0)
         {
-          S.print("I2C device found at address 0x");
+          Serial.print("I2C device found at address 0x");
           if (address<16)
-            S.print("0");
-          S.print(address,HEX);
-          S.println("  !");
+            Serial.print("0");
+          Serial.print(address,HEX);
+          Serial.println("  !");
 
           nDevices++;
         }
       else if (error==4)
         {
-          S.print("Unknown error at address 0x");
+          Serial.print("Unknown error at address 0x");
           if (address<16)
-            S.print("0");
-          S.println(address,HEX);
+            Serial.print("0");
+          Serial.println(address,HEX);
         }
     }
   if (nDevices == 0) {
-    S.println("No I2C devices found\n");
+    Serial.println("No I2C devices found\n");
     return false;
   }
   else if (nDevices > 10) {
-    S.println("Too many I2C devices found\n");
+    Serial.println("Too many I2C devices found\n");
     return false;
   }
   else {
-    S.println("done\n");
+    Serial.println("done\n");
     return true;
   }
 }
