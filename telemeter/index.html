@@ -28,7 +28,17 @@
             <i class="dropdown icon"></i>
             <div class="default text">Port</div>
           </div>
+
+          <span id="file-path"></span>
+
+          <button id="save-button" class="ui tiny inverted button">Save</button>
+          <button id="clear-button" class="ui tiny inverted button">Clear</button>
+
+          <input id="load-file-input" type="file"/>
+          <input id="save-file-input" type="file" nwsaveas="data.txt" />
+
           <pre id="state-screen"></pre>
+
         </div>
       </div>
       <div class="row" id="row1">
@@ -47,6 +57,7 @@
    html, body, #main {
      height: 100%;
      background: #202020;
+     color: white;
    }
    #row0 {
      height: 60%;
@@ -57,6 +68,9 @@
    #row0>.column, #row1>.column {
      height: 100%;
    }
+   #source-dropdown {
+     min-width: 100px
+   }
    #log-screen  {
      overflow: scroll;
      height: 100%;
@@ -64,8 +78,11 @@
    }
    #state-screen {
      overflow: scroll;
-     height: calc(100% - 80px);
+     max-height: calc(100% - 100px);
      color: white;
+   }
+   #save-file-input, #load-file-input, #port-dropdown, #file-path {
+     display: none;
    }
   </style>
   <script>

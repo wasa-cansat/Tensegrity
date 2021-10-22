@@ -2,36 +2,11 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 
 import 'fomantic-ui'
+import { DataSet, Parser } from './data'
 
 const SerialPort = require("chrome-apps-serialport").SerialPort
 
-class DataSet {
-    data:       Array<any>                = []
-    incomings:  { [seq: number]: any }    = []
-    seqMapping: { [seq: number]: number } = {}
-    latestSeq?: number                    = undefined
 
-    append(seq: number, title: string, value: any, index?: number, ) {
-        if (this.latestSeq === undefined) this.latestSeq = seq
-        if (this.incomings[seq] === undefined) this.incomings[seq] = {}
-        if (index === undefined) this.incomings[seq][title] = value
-        else {
-            if (this.incomings[seq][title] === undefined)
-                this.incomings[seq][title] = []
-            this.incomings[seq][title][index] = value
-        }
-    }
-    keySequence(seq: number) {
-        // if (this.seqMapping[seq] >= this.data.length) return
-        this.seqMapping[seq] = this.data.length
-        this.data.push(this.incomings[seq])
-        this.incomings[(seq - 128) % 256] = {}
-        this.latestSeq = seq
-    }
-    getLatest(offset?: number): any {
-        return this.data[(this.data.length - 1 + (offset || 0))]
-    }
-}
 
 window.addEventListener('load', () => {
 
@@ -40,92 +15,76 @@ window.addEventListener('load', () => {
     let serialport: typeof SerialPort
     let telemetryBuffer: string = ''
 
-    const data = new DataSet()
+    const data = new DataSet(
+        [Parser.float('T'),
+         Parser.float('L', ['latitude, longitude']),
+         Parser.float('Q', ['a', 'b', 'c', 'd']),
+         Parser.float('A', ['x', 'y', 'z']),
+         new Parser('R',
+                    (view: DataView) => ({
+                        target:   view.getInt8(0),
+                        position: view.getInt8(1),
+                        voltage:  view.getInt8(2),
+                        fault:    view.getUint8(3)}),
+                    (view: DataView, r) => {
+                        view.setInt8(0, r.target)
+                        view.setInt8(1, r.position)
+                        view.setInt8(2, r.voltage)
+                        view.setInt8(3, r.fault)
+                    },
+                    ['0', '1', '2', '3', '4', '5'])
+        ], 'T')
 
-    let onDataUpdate = (_: any) => {}
-
-    function onread(d: any) {
-        // const data = serialport.read()
-        const str = d.toString()
-        // console.log(str)
-        if ($('#log-screen')[0].scrollHeight > 10000) $('#log-screen').empty()
-        $('#log-screen')
-            .append(str)
-            .animate({scrollTop: $('#log-screen')[0].scrollHeight}, 0)
-        telemetryBuffer += str
-        const commands = telemetryBuffer.split('\n')
-        if (commands.length > 0) telemetryBuffer = commands.pop()!
-        for (const command of commands) {
-            if (command[0] == '#' || !command) continue
-            const hexes = command.match(/.{1,2}/g)!.map(s => parseInt(s, 16))
-            if (hexes.some(isNaN)) continue
-            const view = new DataView(new ArrayBuffer(4))
-            for (let i = 0; i < 4; i++) view.setUint8(3 - i, hexes[i+4])
-            const id    = String.fromCharCode(hexes[0])
-            const seq   = hexes[1]
-            const type_ = String.fromCharCode(hexes[2])
-            const index = hexes[3]
-
-            let fvalue = view.getFloat32(0)
-            let ivalue = view.getInt32(0)
-            switch (type_) {
-                case 'T':
-                    data.append(seq, type_, fvalue)
-                    data.keySequence(seq)
-                    break
-                case 'Q':
-                case 'L':
-                case 'A':
-                    data.append(seq, type_, fvalue, index)
-                    break
-                case 'R':
-                    const d = {target: view.getInt8(3),
-                               position: view.getInt8(2),
-                               voltage: view.getInt8(1),
-                               fault: view.getUint8(0)}
-                    data.append(seq, type_, d, index)
-                    break
-                default:
-                    continue
-            }
-        }
-
-        const latest = data.getLatest(-1)
-
-        if (latest)  {
-            $('#state-screen').text(JSON.stringify(latest, null, '  '))
-            onDataUpdate(latest)
-        }
-    }
+    data.onUpdate(onread)
 
     $('#source-dropdown').dropdown({
         onChange: async (_, text: string) => {
             switch (text) {
+                case 'File':
+                    $('#port-dropdown').hide()
+                    $('#load-file-input').trigger('click')
+                    break
                 case 'Serial':
                     const list = await SerialPort.list()
                     console.log(list)
-                    $('#port-dropdown').dropdown({
-                        values: list.filter((port: any) =>
-                            port.manufacturer).map((port: any) =>
-                                ({name: port.comName, value: port.path})),
-                        onChange: (path: string) => {
-                            serialport =
-                                new SerialPort(
-                                    path,
-                                    {baudrate: 115200},
-                                    (err: any) => {
-                                        if (err) console.log('Error: ',
-                                                             err.message)
-                                    })
-                            serialport.on('open',
-                                          () => {serialport.drain()})
-                            serialport.on('data', onread)
-                        }
-                    })
+                    $('#file-path').hide()
+                    $('#port-dropdown')
+                            .show()
+                            .dropdown({
+                                values:
+                                list.filter((port: any) => port.manufacturer)
+                                    .map((port: any) =>
+                                        ({name: port.comName,
+                                          value: port.path})),
+                                onChange: (path: string) => {
+                                    data.readHexFromSerial(path)
+                                }
+                            })
                     break
             }
 
         }
+    })
+
+    $('#save-button')
+        .on('click', () => {$('#save-file-input').trigger('click')})
+    $('#clear-button').on('click', () => {
+        data.clear()
+        $('#log-screen').empty()
+        $('#state-screen').empty()
+    })
+
+    $('#save-file-input').on('input', (e: any) => {
+        const file = e.target.files[0]
+        data.writeHexToFile(file.path)
+        $(e.target).prop('value', '')
+    })
+
+    $('#load-file-input').on('input', (e: any) => {
+        const file = e.target.files[0]
+        data.readHexFromFile(file.path)
+        $('#file-path').show().text(file.path)
+        $(e.target).prop('value', '')
     })
 
     THREE.Object3D.DefaultUp.set(0, 0, 1);
@@ -263,16 +222,25 @@ window.addEventListener('load', () => {
     scene.add(light)
 
 
-    onDataUpdate = (data: any) => {
+    function onread(newText: string) {
+        if ($('#log-screen')[0].scrollHeight > 10000) $('#log-screen').empty()
+        $('#log-screen')
+            .append(newText)
+            .animate({scrollTop: $('#log-screen')[0].scrollHeight}, 0)
+
+        const latest = data.getLatest(-1)
+        if (!latest) return
+        $('#state-screen').text(JSON.stringify(latest, null, '  '))
+
         const q = new THREE.Quaternion(
-            data.Q[0], data.Q[1], data.Q[2], data.Q[3])
+            latest.Q.b, latest.Q.c, latest.Q.d, latest.a)
         console.log(q)
         // q.invert()
         // console.log(q)
         body.setRotationFromQuaternion(q.conjugate())
-        const a = new THREE.Vector3(data.A[0], data.A[1], data.A[2])
+        const a = new THREE.Vector3(latest.A.x, latest.A.y, latest.A.z)
         accelVec.setDirection(a)
-        for (const [i, leg] of legs.entries()) leg.update(data.R[i])
+        for (const [i, leg] of legs.entries()) leg.update(latest.R[i])
     }
 
     const tick = ():void => {
