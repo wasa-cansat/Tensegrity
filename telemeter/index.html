@@ -50,6 +50,31 @@
 
         </div>
       </div>
+
+
+      <div class="row" id="row2">
+        <div class="ten wide center aligned column">
+          <div class="row centered">
+            <div class="ui inverted basic large label">
+              T
+              <div class="detail" id="time-label">+0</div>
+            </div>
+            <div class="ui icon buttons centered">
+              <button class="ui inverted button" id="backward-button">
+                <i class="step backward icon"></i></button>
+              <button class="ui inverted button" id="pause-button">
+                <i class="pause icon"></i></button>
+              <button class="ui inverted button" id="play-button">
+                <i class="play icon"></i></button>
+              <button class="ui inverted button" id="forward-button">
+                <i class="step forward icon"></i></button>
+            </div>
+          </div>
+          <div class="row centered">
+            <div class="ui inverted slider" id="time-slider"></div>
+          </div>
+        </div>
+        <div class="six wide column"></div>
     </div>
   </body>
 
@@ -60,10 +85,13 @@
      color: white;
    }
    #row0 {
-     height: 60%;
+     height: calc(60% - 100px);
    }
    #row1 {
      height: 40%;
+   }
+   #row2 {
+     height: 100px;
    }
    #row0>.column, #row1>.column {
      height: 100%;
@@ -83,6 +111,10 @@
    }
    #save-file-input, #load-file-input, #port-dropdown, #file-path {
      display: none;
+   }
+   .slider {
+     margin: 0 5%;
+     max-width: 90%;
    }
   </style>
   <script>

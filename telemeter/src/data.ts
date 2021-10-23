@@ -22,6 +22,10 @@ export class DataSet {
         this.clear()
     }
 
+    count(): number {
+        return this.data.length
+    }
+
     clear() {
         this.data         = []
         this.incomings    = []
@@ -29,6 +33,15 @@ export class DataSet {
         this.latestSeq    = undefined
         this.text         = ''
         this.serialBuffer = ''
+    }
+
+    getLatest(offset?: number): any {
+        return this.data[(this.data.length - 1 + (offset || 0))]
+            || this.data[this.data.length - 1]
+    }
+
+    getAt(t: number): any {
+        return this.data[t]
     }
 
     writeHexToFile(path: string) {
@@ -102,11 +115,6 @@ export class DataSet {
         this.incomings[(seq - 128) % 256] = {}
         this.latestSeq = seq
     }
-    getLatest(offset?: number): any {
-        return this.data[(this.data.length - 1 + (offset || 0))]
-            || this.data[this.data.length - 1]
-    }
-
     parseHex(hexes?: string): Message | null {
         if (!hexes || hexes[0] == '#') return null
         const bytes = hexes.match(/.{1,2}/g)!.map(s => parseInt(s, 16))

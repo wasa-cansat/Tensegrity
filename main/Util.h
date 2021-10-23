@@ -12,6 +12,10 @@ Vec3 zero();
 void printVec3(Vec3 v, char prefix = '\0', Print &S = Serial);
 void printQuaternion(Quaternion q, Print &S = Serial);
 
+float getX(Vec3 v);
+float getY(Vec3 v);
+float getZ(Vec3 v);
+
 class Comm {
  public:
     enum Mode {

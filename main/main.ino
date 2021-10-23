@@ -161,10 +161,13 @@ void loop()
   float xg = latgoal - gps.location.lat();
   float yg = lnggoal - gps.location.lng();
 
+  xg = 1;
+  yg = 0;
+
   Vec3 goal_abs(xg, yg, 0);
   goal_abs.normalize();
 
-  Quaternion goal_body = att.rotate(goal_abs);
+  Vec3 goal = att.rotate(goal_abs);
 
   for (uint8_t i = 0; i < 6; i++) {
     /* if (runners[i].enable) runners[i].headTowards(goal_body); */
@@ -177,19 +180,23 @@ void loop()
   // Print for debug
   if (millis() - lastPrint > 1000 / PRINT_FREQ) {
 
-    comm.send('T', 0, (float)start_millis);
+    comm.send('T', 0, start_millis * 1000.0);
 
     comm.send('L', 0, gps.location.lat());
     comm.send('L', 1, gps.location.lng());
 
-    comm.send('Q', 0, (float)att.a);
-    comm.send('Q', 1, (float)att.b);
-    comm.send('Q', 2, (float)att.c);
-    comm.send('Q', 3, (float)att.d);
+    comm.send('Q', 0, att.a);
+    comm.send('Q', 1, att.b);
+    comm.send('Q', 2, att.c);
+    comm.send('Q', 3, att.d);
 
     comm.send('A', 0, imu.calcAccel(imu.ax));
     comm.send('A', 1, imu.calcAccel(imu.ay));
     comm.send('A', 2, imu.calcAccel(imu.az));
+
+    comm.send('G', 0, getX(goal));
+    comm.send('G', 1, getY(goal));
+    comm.send('G', 2, getZ(goal));
 
     /* printQuaternion(att); */
 

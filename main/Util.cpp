@@ -9,6 +9,9 @@ Vec3 zero() {
     return vec3(0, 0, 0);
 }
 
+float getX(Vec3 v) { return v.b; };
+float getY(Vec3 v) { return v.c; };
+float getZ(Vec3 v) { return v.d; };
 
 void printQuaternion(Quaternion q, Print &S) {
     S.print(",p:"); S.println(q.a, 4);  //q0が特別な奴

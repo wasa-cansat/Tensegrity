@@ -12,14 +12,15 @@ window.addEventListener('load', () => {
 
     console.log('Start telemeter')
 
-    let serialport: typeof SerialPort
-    let telemetryBuffer: string = ''
+    let live = true
+    let autoPlayTimer: number | undefined
 
-    const data = new DataSet(
+    const dataSet = new DataSet(
         [Parser.float('T'),
          Parser.float('L', ['latitude, longitude']),
          Parser.float('Q', ['a', 'b', 'c', 'd']),
          Parser.float('A', ['x', 'y', 'z']),
+         Parser.float('G', ['x', 'y', 'z']),
          new Parser('R',
                     (view: DataView) => ({
                         target:   view.getInt8(0),
@@ -35,7 +36,7 @@ window.addEventListener('load', () => {
                     ['0', '1', '2', '3', '4', '5'])
         ], 'T')
 
-    data.onUpdate(onread)
+    dataSet.onUpdate(onread)
 
     $('#source-dropdown').dropdown({
         onChange: async (_, text: string) => {
@@ -57,7 +58,7 @@ window.addEventListener('load', () => {
                                         ({name: port.comName,
                                           value: port.path})),
                                 onChange: (path: string) => {
-                                    data.readHexFromSerial(path)
+                                    dataSet.readHexFromSerial(path)
                                 }
                             })
                     break
@@ -69,23 +70,62 @@ window.addEventListener('load', () => {
     $('#save-button')
         .on('click', () => {$('#save-file-input').trigger('click')})
     $('#clear-button').on('click', () => {
-        data.clear()
+        dataSet.clear()
         $('#log-screen').empty()
         $('#state-screen').empty()
     })
 
     $('#save-file-input').on('input', (e: any) => {
         const file = e.target.files[0]
-        data.writeHexToFile(file.path)
+        dataSet.writeHexToFile(file.path)
         $(e.target).prop('value', '')
     })
 
     $('#load-file-input').on('input', (e: any) => {
         const file = e.target.files[0]
-        data.readHexFromFile(file.path)
+        dataSet.readHexFromFile(file.path)
         $('#file-path').show().text(file.path)
         $(e.target).prop('value', '')
     })
+
+    { ($('#time-slider') as any).slider(
+        {max: 0, onChange: (t: any) => {
+            live = false
+            showData(dataSet.getAt(t))
+        }})
+    }
+    $('#backward-button').on('click', () => {
+        live = false
+        { ($('#time-slider') as any).slider('set value', 0, false) }
+        showData(dataSet.getAt(0))
+    })
+    $('#pause-button').on('click', () => {
+        live = false
+        window.clearTimeout(autoPlayTimer)
+        autoPlayTimer = undefined
+    })
+    $('#play-button').on('click', () => {
+        live = false
+        const t = ($('#time-slider') as any).slider('get value') as number
+        autoPlay(t)
+    })
+    $('#forward-button').on('click', () => {
+        live = true
+        { ($('#time-slider') as any)
+              .slider('set value', dataSet.count() - 1, false) }
+        showData(dataSet.getLatest(-1))
+    })
+
+    function autoPlay(t: number) {
+        ($('#time-slider') as any).slider('set value', t, false)
+        showData(dataSet.getAt(t))
+        if (t < dataSet.count() - 1) {
+            autoPlayTimer = window.setTimeout(() => {
+                autoPlay(t + 1)
+            }, (dataSet.getAt(t+1).T - dataSet.getAt(t).T) * 1000.0)
+        }
+    }
+
 
     THREE.Object3D.DefaultUp.set(0, 0, 1);
 
@@ -163,6 +203,11 @@ window.addEventListener('load', () => {
             new THREE.Vector3(0,0,-1), new THREE.Vector3(0,0,0), 1, 0xFFFFFF)
     body.add(accelVec)
 
+    const goalVec =
+        new THREE.ArrowHelper(
+            new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,0), 1, 0xFF0000)
+    body.add(goalVec)
+
     const pointGeometry = new THREE.BufferGeometry()
     pointGeometry.setAttribute('position',
                            new THREE.Float32BufferAttribute([0, 0, 0], 3))
@@ -194,9 +239,9 @@ window.addEventListener('load', () => {
             this.target = new THREE.Mesh(gt, mt)
             this.mesh.add(this.target)
         }
-        update(data: any) {
-            this.runner.position.y = data.position
-            this.target.position.y = data.target
+        update(dataSet: any) {
+            this.runner.position.y = dataSet.position
+            this.target.position.y = dataSet.target
         }
     }
 
@@ -221,6 +266,29 @@ window.addEventListener('load', () => {
     light.position.set(1,1,1)
     scene.add(light)
 
+    function showData(data: any) {
+        $('#state-screen').text(JSON.stringify(data, null, '  '))
+        $('#time-label').text((data.T >= 0 ? '+' : '') + data.T)
+
+        const Q = data.Q || {a: 1, b: 0, c: 0, d: 0}
+        const q = new THREE.Quaternion(Q.b, Q.c, Q.d, Q.a)
+        console.log(q, q.conjugate())
+        // q.invert()
+        // console.log(q)
+        body.setRotationFromQuaternion(q.conjugate())
+
+        const A = data.A || {x: 0, y: 0, z: -1}
+        const a = new THREE.Vector3(A.x, A.y, A.z)
+        accelVec.setDirection(a)
+
+        const G = data.A || {x: 0, y: 0, z: 0}
+        const g = new THREE.Vector3(G.x, G.y, G.z)
+        accelVec.setDirection(g)
+
+        if (data.R)
+            for (const [i, leg] of legs.entries()) leg.update(data.R[i])
+
+    }
 
     function onread(newText: string) {
         if ($('#log-screen')[0].scrollHeight > 10000) $('#log-screen').empty()
@@ -228,19 +296,16 @@ window.addEventListener('load', () => {
             .append(newText)
             .animate({scrollTop: $('#log-screen')[0].scrollHeight}, 0)
 
-        const latest = data.getLatest(-1)
-        if (!latest) return
-        $('#state-screen').text(JSON.stringify(latest, null, '  '))
+        { (($('#time-slider')) as any)
+              .slider('setting', 'max', dataSet.count() - 1) }
 
-        const q = new THREE.Quaternion(
-            latest.Q.b, latest.Q.c, latest.Q.d, latest.a)
-        console.log(q)
-        // q.invert()
-        // console.log(q)
-        body.setRotationFromQuaternion(q.conjugate())
-        const a = new THREE.Vector3(latest.A.x, latest.A.y, latest.A.z)
-        accelVec.setDirection(a)
-        for (const [i, leg] of legs.entries()) leg.update(latest.R[i])
+        const latest = dataSet.getLatest(-1)
+        if (!latest) return
+        if (live) {
+            (($('#time-slider')) as any)
+                  .slider('set value', dataSet.count(), false)
+            showData(latest)
+        }
     }
 
     const tick = ():void => {
