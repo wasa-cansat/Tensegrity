@@ -17,7 +17,7 @@ window.addEventListener('load', () => {
 
     const dataSet = new DataSet(
         [Parser.float('T'),
-         Parser.float('L', ['latitude, longitude']),
+         Parser.float('L', ['latitude', 'longitude']),
          Parser.float('Q', ['a', 'b', 'c', 'd']),
          Parser.float('A', ['x', 'y', 'z']),
          Parser.float('G', ['x', 'y', 'z']),
@@ -113,7 +113,7 @@ window.addEventListener('load', () => {
         live = true
         { ($('#time-slider') as any)
               .slider('set value', dataSet.count() - 1, false) }
-        showData(dataSet.getLatest(-1))
+        showData(dataSet.getLatest())
     })
 
     function autoPlay(t: number) {
@@ -205,7 +205,7 @@ window.addEventListener('load', () => {
 
     const goalVec =
         new THREE.ArrowHelper(
-            new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,0), 1, 0xFF0000)
+            new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,0), 2, 0xFF0000)
     body.add(goalVec)
 
     const pointGeometry = new THREE.BufferGeometry()
@@ -272,18 +272,21 @@ window.addEventListener('load', () => {
 
         const Q = data.Q || {a: 1, b: 0, c: 0, d: 0}
         const q = new THREE.Quaternion(Q.b, Q.c, Q.d, Q.a)
-        console.log(q, q.conjugate())
+        console.log(q.length(), q)
+        // q.conjugate()
+
+        // console.log(q)
         // q.invert()
         // console.log(q)
-        body.setRotationFromQuaternion(q.conjugate())
+        body.setRotationFromQuaternion(q)
 
         const A = data.A || {x: 0, y: 0, z: -1}
         const a = new THREE.Vector3(A.x, A.y, A.z)
         accelVec.setDirection(a)
 
-        const G = data.A || {x: 0, y: 0, z: 0}
+        const G = data.G || {x: 0, y: 0, z: 0}
         const g = new THREE.Vector3(G.x, G.y, G.z)
-        accelVec.setDirection(g)
+        goalVec.setDirection(g)
 
         if (data.R)
             for (const [i, leg] of legs.entries()) leg.update(data.R[i])
@@ -299,7 +302,7 @@ window.addEventListener('load', () => {
         { (($('#time-slider')) as any)
               .slider('setting', 'max', dataSet.count() - 1) }
 
-        const latest = dataSet.getLatest(-1)
+        const latest = dataSet.getLatest()
         if (!latest) return
         if (live) {
             (($('#time-slider')) as any)

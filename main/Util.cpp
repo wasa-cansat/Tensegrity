@@ -22,11 +22,11 @@ void printQuaternion(Quaternion q, Print &S) {
 
 void printVec3(Vec3 v, char prefix, Print &S) {
     S.print(","); if (prefix != '\0') S.print(prefix);
-    S.print("x:"); S.println(v.b, 4);
+    S.print("x:"); S.print(v.b, 4);
     S.print(","); if (prefix != '\0') S.print(prefix);
-    S.print("y:"); S.println(v.c, 4);
+    S.print("y:"); S.print(v.c, 4);
     S.print(","); if (prefix != '\0') S.print(prefix);
-    S.print("z:"); S.println(v.d, 4);
+    S.print("z:"); S.print(v.d, 4);
 }
 
 void Comm::log(const char* str) {

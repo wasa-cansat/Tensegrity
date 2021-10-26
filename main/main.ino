@@ -1,4 +1,5 @@
 /* #include <BluetoothSerial.h> */
+#include <math.h>
 #include <SPI.h>
 #include <Wire.h>
 #include <TinyGPS++.h>
@@ -50,7 +51,7 @@ Runner runners[6] = {
 #define FREQ 20
 
 #define SERIAL_BAUD 112500
-#define PRINT_FREQ 4
+#define PRINT_FREQ 5
 static unsigned long lastPrint = 0; // Keep track of print time
 
 // Command =====================================================================
@@ -69,16 +70,17 @@ enum class CommandState {
     };
 CommandState command_state = CommandState::StandBy;
 
-// Earth's magnetic field varies by location. Add or subtract
-// a declination to get a more accurate heading. Calculate
-// your's here:
-// http://www.ngdc.noaa.gov/geomag-web/#declination
-#define DECLINATION -8.58 // Declination (degrees) in Boulder, CO.
+#define DECLINATION 8 // Declination (degrees)
 
+/* Quaternion dir_correction = */
+/*   Quaternion::from_euler_rotation(0, 0, (-DECLINATION) / -180.0 * M_PI); */
 
+int calibrating = 0;
+Vec3 mag_center  = vec3(0.0199, -0.4695, -0.0373);
+float mag_radius = 1;
 
 //Function definitions
-void calibrateIMU();
+float calibrate(Vec3 &mag, Vec3 &center, float &radius, float gain = 0.0001);
 bool scanI2C();
 void printGyro();
 void printAccel();
@@ -135,10 +137,33 @@ void loop()
   if (imu.accelAvailable()) imu.readAccel();
   if (imu.magAvailable())   imu.readMag();
 
-  MadgwickFilter
-    .update(imu.calcGyro(imu.gx), imu.calcGyro(imu.gy), imu.calcGyro(imu.gz),
-            imu.calcAccel(imu.ax),imu.calcAccel(imu.ay),imu.calcAccel(imu.az),
-            imu.calcMag(-imu.my), imu.calcMag(-imu.mx), imu.calcMag(imu.mz));
+  Vec3 gyro =
+    vec3(imu.calcGyro(imu.gx), imu.calcGyro(-imu.gy), imu.calcGyro(imu.gz));
+  Vec3 accel =
+    vec3(0.80665 * imu.calcAccel(-imu.ax),
+         0.80665 * imu.calcAccel(imu.ay),
+         0.80665 * imu.calcAccel(-imu.az));
+  Vec3 mag =
+    vec3(imu.calcMag(-imu.mx) - getX(mag_center),
+         imu.calcMag(-imu.my) - getY(mag_center),
+         imu.calcMag(imu.mz) - getZ(mag_center));
+
+  float epsilon = 0;
+
+  if (calibrating > 0) {
+    epsilon = calibrate(mag, mag_center, mag_radius, 0.01);
+    calibrating--;
+    if (calibrating == 0) {
+      comm.log("End Calibration");
+    }
+  }
+
+
+  MadgwickFilter.update(getX(gyro),  getY(gyro),  getZ(gyro),
+                        -getX(accel), -getY(accel), -getZ(accel),
+                        -getX(mag),  -getY(mag),    -getZ(mag));
+  /* MadgwickFilter.updateIMU(getX(gyro),  getY(gyro),  getZ(gyro), */
+  /*                          getX(accel), getY(accel), getZ(accel)); */
 
   float q[4];
   MadgwickFilter.getQuaternion(q);
@@ -148,6 +173,11 @@ void loop()
   att.b=q[1];
   att.c=q[2];
   att.d=q[3];
+
+  /* att *= dir_correction; */
+  att.normalize();
+
+  Quaternion att_inv = att.conj();
 
   while(ss.available() > 0){
     char c = ss.read();
@@ -166,8 +196,10 @@ void loop()
 
   Vec3 goal_abs(xg, yg, 0);
   goal_abs.normalize();
+  Vec3 goal = att_inv.rotate(goal_abs);
 
-  Vec3 goal = att.rotate(goal_abs);
+  /* Vec3 bodyZ = att_inv.rotate(vec3(0, 0, 1)); */
+  /* Vec3 bodyX = att_inv.rotate(vec3(1, 0, 0)); */
 
   for (uint8_t i = 0; i < 6; i++) {
     /* if (runners[i].enable) runners[i].headTowards(goal_body); */
@@ -180,7 +212,6 @@ void loop()
   // Print for debug
   if (millis() - lastPrint > 1000 / PRINT_FREQ) {
 
-    comm.send('T', 0, start_millis * 1000.0);
 
     comm.send('L', 0, gps.location.lat());
     comm.send('L', 1, gps.location.lng());
@@ -190,9 +221,9 @@ void loop()
     comm.send('Q', 2, att.c);
     comm.send('Q', 3, att.d);
 
-    comm.send('A', 0, imu.calcAccel(imu.ax));
-    comm.send('A', 1, imu.calcAccel(imu.ay));
-    comm.send('A', 2, imu.calcAccel(imu.az));
+    comm.send('A', 0, getX(accel));
+    comm.send('A', 1, getY(accel));
+    comm.send('A', 2, getZ(accel));
 
     comm.send('G', 0, getX(goal));
     comm.send('G', 1, getY(goal));
@@ -200,9 +231,24 @@ void loop()
 
     /* printQuaternion(att); */
 
+    /* printVec3(gyro,  'G'); */
+    /* printVec3(accel, 'A'); */
+    /* printVec3(bodyX, 'X'); */
+    /* printVec3(bodyZ, 'Z'); */
+
+    /* printVec3(mag,   'M'); */
+    /* printVec3(mag_center, 'C'); */
+
+    /* if (calibrating > 0) { */
+    /*   Serial.print(",e:"); */
+    /*   Serial.print(epsilon); */
+    /* } */
+
+    /* Serial.println(""); */
 
 
-    comm.nextSequence();
+    /* printAttitude(); */
+
 
     for (uint8_t i = 0; i < 6; i++) {
       /* if (runners[i].enable) runners[i].print(); */
@@ -214,7 +260,6 @@ void loop()
     /* printGyro(); */
     /* printAccel(); */
     /* printMag(); */
-    /* printAttitude(); */
 
     /* Vec3 v = vec3(0, 0, -1); */
     /* printVec3(att.rotate(v)); */
@@ -226,8 +271,11 @@ void loop()
     /* printQuaternion(att); */
 
     for (uint8_t i = 0; i < 6; i++) {
-      if (runners[i].enable) runners[i].send();
+      /* if (runners[i].enable) runners[i].send(); */
     }
+
+    comm.send('T', 0, start_millis / 1000.0);
+    comm.nextSequence();
 
     lastPrint = millis(); // Update lastPrint time
   }
@@ -243,8 +291,8 @@ void loop()
         comm.log("Jog: Specify the runnner");
       }
       else if (cmd == "c") {
-        comm.log("Calibrate");
-        calibrateIMU();
+        comm.log("Start Calibration");
+        calibrating = 200;
       }
       else {
         comm.log("Wrong command");
@@ -303,10 +351,20 @@ void loop()
 }
 
 
-void calibrateIMU() {
-  comm.log("Calibration started...");
-  imu.calibrateMag(true);
-  comm.log("Calculation finished");
+
+float calibrate(Vec3& mag, Vec3& center, float& radius, float gain) {
+  float f = mag.b * mag.b + mag.c * mag.c + mag.d * mag.d - radius*radius;
+  center.b += 4 * gain * f * mag.b;
+  center.c += 4 * gain * f * mag.c;
+  center.d += 4 * gain * f * mag.d;
+  radius   += 4 * gain * f * radius;
+  if (f > 1E30) {
+    center.b = 0;
+    center.c = 0;
+    center.d = 0;
+    radius   = 1;
+  }
+  return f;
 }
 
 void printGyro() {

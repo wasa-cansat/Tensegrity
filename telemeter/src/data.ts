@@ -50,7 +50,7 @@ export class DataSet {
                 console.error(err)
                 return
             }
-            console.log('Saved hex file')
+            console.log('Saved hex file', this.text)
         })
     }
     readHexFromFile(path: string) {
@@ -79,6 +79,7 @@ export class DataSet {
         serialport.on('data', (d: any) => {
             const text = d.toString()
             this.serialBuffer += text
+            this.text += text
             const messages = this.serialBuffer.split('\n')
             if (messages.length > 0) this.serialBuffer = messages.pop()!
             for (const message of messages) this.appendHexMessage(message)
@@ -118,7 +119,10 @@ export class DataSet {
     parseHex(hexes?: string): Message | null {
         if (!hexes || hexes[0] == '#') return null
         const bytes = hexes.match(/.{1,2}/g)!.map(s => parseInt(s, 16))
-        if (bytes.some(isNaN)) return null
+        if (bytes.some(isNaN)) {
+            console.error('Error while parsing hex', bytes)
+            return null
+        }
 
         const id    = String.fromCharCode(bytes[0])
         const seq   = bytes[1]

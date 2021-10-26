@@ -32,7 +32,6 @@ class Comm {
 
  public:
 
-
     Comm(uint8_t id): id(id) {};
 
     void setMode(Mode m) {mode = m;}
@@ -55,6 +54,9 @@ class Comm {
 
     String readLine();
     bool inputAvailable();
+
+    /* void receive(uint8_t) */
+
 
     void return_();
 };
