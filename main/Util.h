@@ -16,6 +16,33 @@ float getX(Vec3 v);
 float getY(Vec3 v);
 float getZ(Vec3 v);
 
+class Message {
+ public:
+    uint8_t seq;
+    uint8_t type;
+    uint8_t index;
+    /* uint32_t     payload; */
+    byte    payload[4];
+
+    Message* next = nullptr;
+
+    /* Message(uintt8_t type, uint8_t index, uint32_t payload): */
+    /*   type(type), index(index), payload(payload), next(nullptr) {}; */
+    Message(byte *bytes);
+};
+
+class MessageList {
+ public:
+    Message* first = nullptr;
+    Message* last  = nullptr;
+    unsigned count = 0;
+    uint8_t id;
+
+    MessageList(uint8_t id): id(id) {};
+    bool parseHexAndAdd(String str);
+    int remove(Message *message);
+};
+
 class Comm {
  public:
     enum Mode {
@@ -28,35 +55,46 @@ class Comm {
     Stream &serial    = Serial;
     Stream &telemetry = Serial;
 
-    uint8_t seq;
+    uint8_t seq = 0;
+
+    MessageList messages;
 
  public:
 
-    Comm(uint8_t id): id(id) {};
+    Comm(uint8_t id): id(id), messages(MessageList(id)) {};
 
     void setMode(Mode m) {mode = m;}
-    void setSerialDestination(Stream &s) {serial = s;}
-    void setTelemetryDestination(Stream &s) {telemetry = s;}
+    void setSerialDestination(Stream& s) {serial = s;}
+    void setTelemetryDestination(Stream& s) {telemetry = s;}
 
     void nextSequence() {seq++;};
+
+    // Sending
 
     void log(const char* str);
     void log(String &str);
     void error(uint8_t code, const char* info, const char* str = "");
+    void return_();
+
     void send(uint8_t type, uint8_t index);
-    void send(uint8_t type, uint8_t index, const void* payload);
-    void send(uint8_t type, uint8_t index, const byte payload[4]);
-    void send(uint8_t type, uint8_t index, const char payload[4]);
-    void send(uint8_t type, uint8_t index, int32_t  payload);
-    void send(uint8_t type, uint8_t index, uint32_t payload);
-    void send(uint8_t type, uint8_t index, float    payload);
-    void send(uint8_t type, uint8_t index, double   payload);
+    template <typename T>
+        void send(uint8_t type, uint8_t index, const T& payload) {
+        return send(type, index, reinterpret_cast<const byte*>(&payload));
+    }
+
+    // Receiving
+
+    int receive();
+    unsigned messageCount();
+    template <typename T>
+        bool expect(uint8_t type, uint8_t& index, T& payload) {
+        return expect(type, index, reinterpret_cast<byte*>(&payload));
+    }
 
     String readLine();
     bool inputAvailable();
 
-    /* void receive(uint8_t) */
-
-
-    void return_();
+ private:
+    void send(uint8_t type, uint8_t index, const byte* payload);
+    bool expect(uint8_t type, uint8_t& index, byte* payload);
 };

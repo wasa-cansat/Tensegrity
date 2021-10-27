@@ -51,6 +51,7 @@ Runner runners[6] = {
 #define FREQ 20
 
 #define SERIAL_BAUD 112500
+
 #define PRINT_FREQ 5
 static unsigned long lastPrint = 0; // Keep track of print time
 
@@ -72,8 +73,8 @@ CommandState command_state = CommandState::StandBy;
 
 #define DECLINATION 8 // Declination (degrees)
 
-/* Quaternion dir_correction = */
-/*   Quaternion::from_euler_rotation(0, 0, (-DECLINATION) / -180.0 * M_PI); */
+Quaternion dir_correction =
+  Quaternion::from_euler_rotation(0, 0, (-DECLINATION + 90) / -180.0 * M_PI);
 
 int calibrating = 0;
 Vec3 mag_center  = vec3(0.0199, -0.4695, -0.0373);
@@ -212,22 +213,41 @@ void loop()
   // Print for debug
   if (millis() - lastPrint > 1000 / PRINT_FREQ) {
 
+    // Receive command
+    if (comm.receive() > 0) {
+      uint8_t index;
+      int   ivalue;
+      float fvalue;
+      if (comm.expect('j', index, ivalue)) {
+        String msg = "Jog #";
+        msg.concat(String(index));
+        msg.concat(" ");
+        msg.concat(String(ivalue));
+        comm.log(msg);
 
-    comm.send('L', 0, gps.location.lat());
-    comm.send('L', 1, gps.location.lng());
+        if (index >= 0) runners[index].jog(ivalue / 1000.0 * FREQ);
+      }
+      if (comm.expect('c', index, ivalue)) {
+        comm.log("Start Calibration");
+        calibrating = ivalue * FREQ;
+      }
+    }
 
-    comm.send('Q', 0, att.a);
-    comm.send('Q', 1, att.b);
-    comm.send('Q', 2, att.c);
-    comm.send('Q', 3, att.d);
+    comm.send('L', 0, (float)gps.location.lat());
+    comm.send('L', 1, (float)gps.location.lng());
 
-    comm.send('A', 0, getX(accel));
-    comm.send('A', 1, getY(accel));
-    comm.send('A', 2, getZ(accel));
+    comm.send('Q', 0, (float)att.a);
+    comm.send('Q', 1, (float)att.b);
+    comm.send('Q', 2, (float)att.c);
+    comm.send('Q', 3, (float)att.d);
 
-    comm.send('G', 0, getX(goal));
-    comm.send('G', 1, getY(goal));
-    comm.send('G', 2, getZ(goal));
+    comm.send('A', 0, (float)getX(accel));
+    comm.send('A', 1, (float)getY(accel));
+    comm.send('A', 2, (float)getZ(accel));
+
+    comm.send('G', 0, (float)getX(goal));
+    comm.send('G', 1, (float)getY(goal));
+    comm.send('G', 2, (float)getZ(goal));
 
     /* printQuaternion(att); */
 
@@ -251,98 +271,14 @@ void loop()
 
 
     for (uint8_t i = 0; i < 6; i++) {
-      /* if (runners[i].enable) runners[i].print(); */
+      if (runners[i].enable) runners[i].send();
     }
 
-    /* Serial.print(",Lat:"); Serial.print(gps.location.lat(), 6); */
-    /* Serial.print(",Lng:"); Serial.print(gps.location.lng(), 6); */
-
-    /* printGyro(); */
-    /* printAccel(); */
-    /* printMag(); */
-
-    /* Vec3 v = vec3(0, 0, -1); */
-    /* printVec3(att.rotate(v)); */
-    /* Serial.println(""); */
-
-
-    /* printVec3(goal_abs, 'G'); */
-
-    /* printQuaternion(att); */
-
-    for (uint8_t i = 0; i < 6; i++) {
-      /* if (runners[i].enable) runners[i].send(); */
-    }
-
-    comm.send('T', 0, start_millis / 1000.0);
+    comm.send('T', 0, (float)(start_millis / 1000.0));
     comm.nextSequence();
 
     lastPrint = millis(); // Update lastPrint time
   }
-
-  // Receive command
-  String cmd = comm.readLine();
-  if (cmd.length() > 0) {
-    switch (command_state) {
-    case CommandState::StandBy:
-      if (cmd == "j" || (cmd == "" && command == Command::Jog)) {
-        command = Command::Jog;
-        command_state = CommandState::Target;
-        comm.log("Jog: Specify the runnner");
-      }
-      else if (cmd == "c") {
-        comm.log("Start Calibration");
-        calibrating = 200;
-      }
-      else {
-        comm.log("Wrong command");
-        command_state = CommandState::StandBy;
-      }
-      break;
-    case CommandState::Target:
-      if (cmd == "x") {
-
-      }
-      else if (cmd == "") {
-        command_state = CommandState::Value;
-        comm.log("Input the value");
-      }
-      else {
-        int number = cmd.toInt();
-        if (0 <= number && number <= 5) {
-          command_target = number;
-          command_state = CommandState::Value;
-          comm.log("Input the value");
-        }
-        else {
-          comm.log("Wrong number");
-          command_state = CommandState::StandBy;
-        }
-      }
-      break;
-    case CommandState::Value:
-      if (cmd != "") command_value = cmd.toInt();
-      switch (command) {
-      case Command::Jog:
-        String msg = "Jog #";
-        msg.concat(String(command_target));
-        msg.concat(" ");
-        msg.concat(String(command_value));
-        comm.log(msg);
-
-        if (command_target >= 0) {
-          runners[command_target].jog(command_value / 1000.0 * FREQ);
-        }
-
-        command_state = CommandState::StandBy;
-        break;
-      }
-      break;
-    }
-  }
-
-
-
 
   unsigned past_millis = millis() - start_millis;
   int wait = 1000 / FREQ - past_millis;

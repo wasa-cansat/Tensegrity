@@ -13,10 +13,15 @@ export class DataSet {
 
     text: string = ''
     serialBuffer: string = ''
+    serialport: typeof SerialPort | null
+    sendSeq = 0
 
     onUpdateCallback: (newText: string) => void = () => {}
 
-    constructor(parsers: Array<Parser<any>>, keyType: string) {
+    target: string
+
+    constructor(target: string, parsers: Array<Parser<any>>, keyType: string) {
+        this.target = target
         this.parsers = Object.fromEntries(parsers.map(p => [p.type_, p]))
         this.keyType = keyType
         this.clear()
@@ -69,14 +74,14 @@ export class DataSet {
         })
     }
     readHexFromSerial(path: string) {
-        const serialport =
+        this.serialport =
             new SerialPort(
                 path, {baudrate: 115200},
                 (err: any) => {
                     if (err) console.error(err.message)
                 })
         this.serialBuffer = ''
-        serialport.on('data', (d: any) => {
+        this.serialport.on('data', (d: any) => {
             const text = d.toString()
             this.serialBuffer += text
             this.text += text
@@ -85,6 +90,13 @@ export class DataSet {
             for (const message of messages) this.appendHexMessage(message)
             this.onUpdateCallback(text)
         })
+    }
+    sendInt(type_: string, index: number, value: number) {
+        const view = new DataView(new ArrayBuffer(4))
+        view.setInt32(0, value, true)
+        console.log(this.printCommand(this.target, this.sendSeq, type_, index, view) + '\n')
+        this.serialport.write(this.printCommand(this.target, this.sendSeq, type_, index, view) + '\n')
+        this.sendSeq = (this.sendSeq + 1) % 256
     }
 
     onUpdate(callback: (newText: string) => void) {
@@ -141,6 +153,24 @@ export class DataSet {
         return new Message(id, seq, type_, index_, payload)
     }
 
+    printCommand(id: string, seq: number, type_: string, index: number,
+                 view: DataView): string {
+        const bytes = new Array(8)
+
+        bytes[0] = id.charCodeAt(0)
+        bytes[1] = seq
+        bytes[2] = type_.charCodeAt(0)
+        bytes[3] = index
+        for (let i = 0; i < 4; i++) bytes[i+4] = view.getUint8(i)
+
+        let hexes = ''
+        for (let i = 0; i < 8; i++) {
+            if (bytes[i] < 16) hexes += 0
+            hexes += bytes[i].toString(16)
+        }
+
+        return hexes
+    }
     printHex(message: Message): string | null {
         const parser = this.parsers[message.type_]
         if (!parser) return null
@@ -154,7 +184,13 @@ export class DataSet {
         bytes[3] = message.index
         for (let i = 0; i < 4; i++) bytes[i+4] = view.getUint8(i)
 
-        return null
+        let hexes = ''
+        for (let i = 0; i < 8; i++) {
+            if (bytes[i] < 16) hexes += 0
+            hexes += bytes[i].toString(0)
+        }
+
+        return hexes
     }
 }
 

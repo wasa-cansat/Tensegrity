@@ -16,6 +16,7 @@ window.addEventListener('load', () => {
     let autoPlayTimer: number | undefined
 
     const dataSet = new DataSet(
+        'T',
         [Parser.float('T'),
          Parser.float('L', ['latitude', 'longitude']),
          Parser.float('Q', ['a', 'b', 'c', 'd']),
@@ -125,6 +126,19 @@ window.addEventListener('load', () => {
             }, (dataSet.getAt(t+1).T - dataSet.getAt(t).T) * 1000.0)
         }
     }
+
+    $('#send-button').on('click', () => {
+        let   type_ = $('#command-input').val() as string
+        const index = $('#index-input').val() as number || 0
+        const value = $('#value-input').val() as number || 0
+        if (type_ == '') return;
+        if (type_.length > 1) {
+            type_ = type_.charAt(0)
+            $('#command-input').val(type_)
+        }
+        console.log('Send command', type_, index, value)
+        dataSet.sendInt(type_, index, value)
+    })
 
 
     THREE.Object3D.DefaultUp.set(0, 0, 1);
@@ -268,7 +282,8 @@ window.addEventListener('load', () => {
 
     function showData(data: any) {
         $('#state-screen').text(JSON.stringify(data, null, '  '))
-        $('#time-label').text((data.T >= 0 ? '+' : '') + data.T)
+        $('#time-label').text(
+            (data.T >= 0 ? '+' : '') + (data.T.toFixed(3) ) )
 
         const Q = data.Q || {a: 1, b: 0, c: 0, d: 0}
         const q = new THREE.Quaternion(Q.b, Q.c, Q.d, Q.a)

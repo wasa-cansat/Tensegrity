@@ -46,11 +46,7 @@ void Comm::error(uint8_t code, const char* info, const char* str) {
     send('E', code, info);
 }
 
-void Comm::send(uint8_t type, uint8_t index) {
-    send(type, index, 0);
-}
-
-void Comm::send(uint8_t type, uint8_t index, const byte payload[4]) {
+void Comm::send(uint8_t type, uint8_t index, const byte* payload) {
     byte data[8] = {id, seq, type, index};
     for (int i = 0; i < 4; i++) data[4+i] = payload[i];
 
@@ -69,23 +65,31 @@ void Comm::send(uint8_t type, uint8_t index, const byte payload[4]) {
         break;
     }
 }
-void Comm::send(uint8_t type, uint8_t index, const void* payload) {
-    send(type, index, static_cast<const byte*>(payload));
+void Comm::send(uint8_t type, uint8_t index) {
+    send(type, index, 0);
 }
-void Comm::send(uint8_t type, uint8_t index, const char payload[4]) {
-    send(type, index, static_cast<const void*>(payload));
+
+int Comm::receive() {
+    while (inputAvailable()) {
+        String str = readLine();
+        if (str == "") continue;
+        messages.parseHexAndAdd(str);
+    }
+    return messages.count;
 }
-void Comm::send(uint8_t type, uint8_t index, int32_t payload) {
-    send(type, index, static_cast<void*>(&payload));
-}
-void Comm::send(uint8_t type, uint8_t index, uint32_t payload) {
-    send(type, index, static_cast<void*>(&payload));
-}
-void Comm::send(uint8_t type, uint8_t index, float payload) {
-    send(type, index, static_cast<void*>(&payload));
-}
-void Comm::send(uint8_t type, uint8_t index, double payload) {
-    send(type, index, (float)payload);
+
+bool Comm::expect(uint8_t type, uint8_t& index, byte* payload) {
+    Message* message = messages.first;
+    while (message != nullptr) {
+        if (message->type == type) {
+            index = message->index;
+            for (int i = 0; i < 4; i++) payload[i] = message->payload[i];
+            messages.remove(message);
+            return true;
+        }
+        message = message->next;
+    }
+    return false;
 }
 
 String Comm::readLine() {
@@ -95,9 +99,62 @@ String Comm::readLine() {
 }
 
 bool Comm::inputAvailable() {
-    return serial.available() > 0 || telemetry.available();
+    return serial.available() > 0 || telemetry.available() > 0;
 }
 
 void Comm::return_() {
     telemetry.print('\n');
+}
+
+
+Message::Message(byte *bytes) {
+    seq        = bytes[1];
+    type       = bytes[2];
+    index      = bytes[3];
+    payload[0] = bytes[4];
+    payload[1] = bytes[5];
+    payload[2] = bytes[6];
+    payload[3] = bytes[7];
+}
+
+bool MessageList::parseHexAndAdd(String str) {
+    char *err = NULL;
+    byte bytes[8];
+    for (int i = 0; i < 8; i++) {
+        char hex[3];
+        hex[0] = str.charAt(2 * i );
+        hex[1] = str.charAt(2 * i + 1);
+        hex[2] = '\0';
+        bytes[i] = strtol(hex, &err, 16);
+    }
+    if (*err != '\0')   return false;
+    if (bytes[0] != id) return false;
+
+    Message* message = new Message(bytes);
+
+    if (first == nullptr) first = message;
+    if (last  != nullptr) last->next = message;
+    last = message;
+    count++;
+
+    return true;
+}
+
+int MessageList::remove(Message *message) {
+    Message* m = first;
+    Message* p = nullptr;
+    unsigned position = 0;
+    while (m != nullptr) {
+        if (m == message) {
+            if (p == nullptr) first = message->next;
+            else              p->next = message->next;
+            if (message == last) last = p;
+            delete message;
+            return position;
+        }
+        p = m;
+        m = m->next;
+        position++;
+    }
+    return -1;
 }

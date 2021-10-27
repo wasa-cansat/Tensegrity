@@ -74,7 +74,14 @@
             <div class="ui inverted slider" id="time-slider"></div>
           </div>
         </div>
-        <div class="six wide column"></div>
+        <div class="six wide column">
+          <div class="ui action inverted transparent small input">
+            <input type="text" placeholder="Com" id="command-input">
+            <input type="number" placeholder="Idx" id="index-input">
+            <input type="number" placeholder="Value" id="value-input">
+            <button class="ui inverted button" id="send-button">Send</button>
+          </div>
+        </div>
     </div>
   </body>
 
@@ -115,6 +122,12 @@
    .slider {
      margin: 0 5%;
      max-width: 90%;
+   }
+   #command-input, #index-input {
+     max-width: 40px;
+   }
+   #value-input {
+     max-width: 100px;
    }
   </style>
   <script>
